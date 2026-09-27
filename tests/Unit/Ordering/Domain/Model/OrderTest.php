@@ -11,6 +11,7 @@ use App\Ordering\Domain\Event\OrderRejected;
 use App\Ordering\Domain\Exception\AnswerDeadlineHasPassed;
 use App\Ordering\Domain\Exception\DeliverySlotIsOutsideOpeningHours;
 use App\Ordering\Domain\Exception\EmptyOrderCannotBePlaced;
+use App\Ordering\Domain\Exception\OrderCannotBeCancelledOnceAccepted;
 use App\Ordering\Domain\Exception\OrderCannotBeModified;
 use App\Ordering\Domain\Exception\OrderIsBelowMinimumAmount;
 use App\Ordering\Domain\Exception\OrderIsNotAwaitingAnswer;
@@ -205,6 +206,40 @@ final class OrderTest extends TestCase
         $this->expectException(OrderIsNotAwaitingAnswer::class);
 
         $order->accept($this->now());
+    }
+
+    public function test_the_customer_cancels_an_order_the_restaurant_has_not_accepted_yet(): void
+    {
+        $order = $this->placedOrder();
+        $order->releaseEvents();
+
+        $order->cancel($this->now()->modify('+2 minutes'));
+
+        self::assertSame(OrderStatus::Cancelled, $order->status());
+        self::assertEquals(
+            [new OrderCancelled($order->id(), CancellationReason::CustomerRequest, $this->now()->modify('+2 minutes'))],
+            $order->releaseEvents(),
+        );
+    }
+
+    public function test_an_accepted_order_cannot_be_cancelled(): void
+    {
+        $order = $this->placedOrder();
+        $order->accept($this->now()->modify('+1 minute'));
+
+        $this->expectException(OrderCannotBeCancelledOnceAccepted::class);
+
+        $order->cancel($this->now()->modify('+2 minutes'));
+    }
+
+    public function test_a_rejected_order_cannot_be_cancelled(): void
+    {
+        $order = $this->placedOrder();
+        $order->reject($this->now()->modify('+1 minute'));
+
+        $this->expectException(OrderIsNotAwaitingAnswer::class);
+
+        $order->cancel($this->now()->modify('+2 minutes'));
     }
 
     public function test_an_order_without_answer_after_five_minutes_is_cancelled(): void

@@ -11,6 +11,7 @@ use App\Ordering\Domain\Event\OrderRejected;
 use App\Ordering\Domain\Exception\AnswerDeadlineHasPassed;
 use App\Ordering\Domain\Exception\DeliverySlotIsOutsideOpeningHours;
 use App\Ordering\Domain\Exception\EmptyOrderCannotBePlaced;
+use App\Ordering\Domain\Exception\OrderCannotBeCancelledOnceAccepted;
 use App\Ordering\Domain\Exception\OrderCannotBeModified;
 use App\Ordering\Domain\Exception\OrderIsBelowMinimumAmount;
 use App\Ordering\Domain\Exception\OrderIsNotAwaitingAnswer;
@@ -31,7 +32,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Agrégat Commande : la frontière de cohérence de la Prise de commande.
- * Toute modification passe par ses méthodes métier, qui garantissent R1 à R5.
+ * Toute modification passe par ses méthodes métier, qui garantissent R1 à R6.
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'ordering_order')]
@@ -145,6 +146,22 @@ final class Order extends AggregateRoot
         $this->status = OrderStatus::Rejected;
 
         $this->recordThat(new OrderRejected($this->id, $now));
+    }
+
+    /**
+     * R6 : le client annule sans frais tant que le restaurant n'a pas accepté ; ensuite, c'est impossible.
+     */
+    public function cancel(\DateTimeImmutable $now): void
+    {
+        if (OrderStatus::Accepted === $this->status) {
+            throw OrderCannotBeCancelledOnceAccepted::for($this->id);
+        }
+
+        $this->assertIsAwaitingAnswer();
+
+        $this->status = OrderStatus::Cancelled;
+
+        $this->recordThat(new OrderCancelled($this->id, CancellationReason::CustomerRequest, $now));
     }
 
     /**
