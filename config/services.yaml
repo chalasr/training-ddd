@@ -11,6 +11,7 @@ services:
             - '../src/Kernel.php'
             - '../src/*/Domain/{Model,ValueObject,Event,Exception}'
             - '../src/Catalog/Entity'
+            - '../src/Ordering/PublishedLanguage'
 
     # Chaque handler est branché sur son bus selon l'interface qu'il implémente
     _instanceof:
@@ -25,8 +26,10 @@ services:
     App\Shared\Application\Command\CommandBusInterface: '@App\Shared\Infrastructure\Symfony\Messenger\MessengerCommandBus'
     App\Shared\Application\Query\QueryBusInterface: '@App\Shared\Infrastructure\Symfony\Messenger\MessengerQueryBus'
     App\Shared\Application\Event\EventBusInterface: '@App\Shared\Infrastructure\Symfony\Messenger\MessengerEventBus'
+    App\Shared\Application\Command\CommandSchedulerInterface: '@App\Shared\Infrastructure\Symfony\Messenger\MessengerCommandScheduler'
     App\Ordering\Domain\Repository\OrderRepository: '@App\Ordering\Infrastructure\Doctrine\DoctrineOrderRepository'
     App\Ordering\Application\Port\RestaurantCatalog: '@App\Ordering\Infrastructure\Catalog\RestaurantCatalogAntiCorruptionLayer'
+    App\Delivery\Domain\Repository\RunRepository: '@App\Delivery\Infrastructure\Doctrine\DoctrineRunRepository'
 
 when@test:
     services:

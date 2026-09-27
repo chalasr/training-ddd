@@ -9,3 +9,16 @@ framework:
                 default_middleware:
                     enabled: true
                     allow_no_handlers: true
+
+        transports:
+            # R5 : les commandes programmées attendent leur échéance ici (table SQLite messenger_messages)
+            async: '%env(MESSENGER_TRANSPORT_DSN)%'
+
+        routing:
+            App\Ordering\Application\Command\ExpireOrderIfNotAnsweredCommand: async
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                async: 'in-memory://'

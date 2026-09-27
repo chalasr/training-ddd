@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Ordering\Domain\Model;
 
 use App\Ordering\Domain\Event\OrderAccepted;
+use App\Ordering\Domain\Event\OrderCancelled;
 use App\Ordering\Domain\Event\OrderPlaced;
 use App\Ordering\Domain\Event\OrderRejected;
 use App\Ordering\Domain\Exception\AnswerDeadlineHasPassed;
@@ -14,6 +15,7 @@ use App\Ordering\Domain\Exception\OrderCannotBeModified;
 use App\Ordering\Domain\Exception\OrderIsBelowMinimumAmount;
 use App\Ordering\Domain\Exception\OrderIsNotAwaitingAnswer;
 use App\Ordering\Domain\Exception\OrderMustConcernASingleRestaurant;
+use App\Ordering\Domain\Model\CancellationReason;
 use App\Ordering\Domain\Model\Order;
 use App\Ordering\Domain\Model\OrderStatus;
 use App\Ordering\Domain\Service\DeliveryFeeCalculator;
@@ -203,6 +205,41 @@ final class OrderTest extends TestCase
         $this->expectException(OrderIsNotAwaitingAnswer::class);
 
         $order->accept($this->now());
+    }
+
+    public function test_an_order_without_answer_after_five_minutes_is_cancelled(): void
+    {
+        $order = $this->placedOrder();
+        $order->releaseEvents();
+
+        $order->expireIfNotAnswered($this->now()->modify('+5 minutes'));
+
+        self::assertSame(OrderStatus::Cancelled, $order->status());
+        self::assertEquals(
+            [new OrderCancelled($order->id(), CancellationReason::RestaurantDidNotAnswer, $this->now()->modify('+5 minutes'))],
+            $order->releaseEvents(),
+        );
+    }
+
+    public function test_an_answered_order_does_not_expire(): void
+    {
+        $order = $this->placedOrder();
+        $order->accept($this->now()->modify('+2 minutes'));
+        $order->releaseEvents();
+
+        $order->expireIfNotAnswered($this->now()->modify('+5 minutes'));
+
+        self::assertSame(OrderStatus::Accepted, $order->status());
+        self::assertSame([], $order->releaseEvents());
+    }
+
+    public function test_an_order_does_not_expire_before_its_deadline(): void
+    {
+        $order = $this->placedOrder();
+
+        $order->expireIfNotAnswered($this->now()->modify('+4 minutes'));
+
+        self::assertSame(OrderStatus::Placed, $order->status());
     }
 
     private function draftAtGinette(): Order

@@ -19,3 +19,8 @@ doctrine:
                 is_bundle: false
                 dir: '%kernel.project_dir%/src/Ordering/Domain'
                 prefix: 'App\Ordering\Domain'
+            Delivery:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Delivery/Domain'
+                prefix: 'App\Delivery\Domain'

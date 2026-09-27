@@ -3,19 +3,16 @@
 namespace App\Service;
 
 use Doctrine\DBAL\Connection;
-use Psr\Clock\ClockInterface;
 
 /**
- * Ce qu'il reste de l'ancien OrderService : l'annulation client (R6) et l'expiration (R5),
- * pas encore migrées vers l'agrégat Order. Elles écrivent directement dans la table, en contournant
- * l'agrégat : aucun invariant vérifié par le domaine, aucun événement enregistré.
+ * Ce qu'il reste de l'ancien OrderService : l'annulation client (R6), pas encore migrée vers
+ * l'agrégat Order. Elle écrit directement dans la table, en contournant l'agrégat :
+ * aucun invariant vérifié par le domaine, aucun événement publié (la Livraison n'en saura rien).
  */
 class OrderService
 {
-    public function __construct(
-        private Connection $connection,
-        private ClockInterface $clock,
-    ) {
+    public function __construct(private Connection $connection)
+    {
     }
 
     public function cancelOrder(string $orderId): void
@@ -35,16 +32,5 @@ class OrderService
         $this->connection->update('ordering_order', ['status' => 'cancelled'], ['id' => $orderId]);
 
         // TODO: rembourser le client (Stripe)
-    }
-
-    /**
-     * Appelé toutes les minutes par un cron.
-     */
-    public function expireUnansweredOrders(): int
-    {
-        return (int) $this->connection->executeStatement(
-            'UPDATE ordering_order SET status = ? WHERE status = ? AND placed_at < ?',
-            ['cancelled', 'placed', $this->clock->now()->modify('-5 minutes')->format('Y-m-d H:i:s')],
-        );
     }
 }

@@ -1,22 +1,19 @@
-# Étape 3 : repositories (support de la démonstration du TP 8)
+# Étape 4 : domain events entre contextes (solution du TP 9)
 
-## Les repositories
+## Ce qui a changé
 
-- Le port `src/Ordering/Domain/Repository/OrderRepository.php` : `save()`, `ofId()`, `nextIdentity()`. Aucun type technique.
-- Deux adaptateurs : `Infrastructure/InMemory/InMemoryOrderRepository` (pour tester les cas d'usage sans base) et `Infrastructure/Doctrine/DoctrineOrderRepository`.
-- Les attributs de mapping sur les classes du domaine : un compromis assumé ([ADR 0001](docs/adr/0001-compromis-regle-des-dependances.md)).
-- `tests/Integration/.../DoctrineOrderRepositoryTest` : la commande relue depuis la base est identique à celle enregistrée.
+- **Rappel (en place depuis l'étape 3)** : chaque handler publie `$order->releaseEvents()` après `save()`. Les événements sont traités **après la fin de la commande** : un contexte abonné ne voit jamais un fait qui n'a pas été enregistré.
+- **Le contrat public** `src/Ordering/PublishedLanguage/OrderAcceptedIntegrationEvent` : que des scalaires. Le listener `Ordering/Application/EventListener/PublishIntegrationEventWhenOrderAccepted` traduit l'événement interne en contrat public ([ADR 0003](docs/adr/0003-published-language.md)).
+- **Le contexte Livraison** (`src/Delivery`) : l'agrégat `Run` (au plus deux commandes, R7 ; attribué à un seul coursier), `CreateRunWhenOrderAccepted`, ses repositories et `bin/console app:delivery:runs`.
+- **Les règles d'isolation** (présentes depuis l'étape 3) restent vertes : la Livraison ne connaît d'Ordering que `PublishedLanguage` ; Ordering ignore la Livraison ; le contrat ne contient aucun type interne.
+- **En plus du TP** : `Run` persisté en base, `assignTo(CourierId)`, la commande `app:delivery:runs`, un test fonctionnel de bout en bout.
+- **R5 en asynchrone** : `OrderPlaced` porte l'échéance (`answerDeadline`). `ScheduleExpirationWhenOrderPlaced` programme `ExpireOrderIfNotAnsweredCommand` à cette échéance (transport `async`, en base). Le worker l'exécute, et `Order::expireIfNotAnswered()` décide : sans réponse, la commande est annulée (`OrderCancelled`). Le cron de l'ancien code est supprimé.
 
-## Autour des repositories
+Voir la programmation en action : passez une commande, puis lancez le worker. Cinq minutes plus tard, la commande est annulée.
 
-- **Les cas d'usage** : `Application/Command/{PlaceOrder,AcceptOrder,RejectOrder}CommandHandler`, `Application/Query/FindOrderQueryHandler`. Ils orchestrent (charger, appeler l'agrégat, enregistrer) et ne décident rien.
-- **Des bus** de commandes, de requêtes et d'événements (`Shared/Application`, adaptés par Symfony Messenger dans `Shared/Infrastructure`).
-- **La publication des événements** : après `save()`, chaque handler publie `$order->releaseEvents()`. Les événements sont traités après la fin de la commande. Personne ne les écoute encore : c'est le point de départ du TP 9.
-- **Les commandes console réécrites** dans `Ordering/Infrastructure/Console` : elles traduisent la ligne de commande en commande applicative. Plus aucune règle métier dans la console, et plus de validation dupliquée.
-- **Le contexte `Catalog`** : restaurants et plats, en CRUD assumé. La Prise de commande le lit à travers une anti-corruption layer ([ADR 0002](docs/adr/0002-catalogue-crud-et-anti-corruption-layer.md)). L'ancien `Restaurant` ne porte plus les commandes.
-- **`tests/Architecture/DependencyRulesTest`** : les règles de dépendance vérifiées à chaque lancement des tests. Celles qui isolent la Livraison sont déjà là : elles serviront au TP 9.
-- **Le squelette du contexte Livraison** (`src/Delivery/Domain/ValueObject/RunId` et `OrderReference`), point de départ du TP 9.
-- `tests/Unit/Ordering/Application/.../PlaceOrderCommandHandlerTest` : un cas d'usage testé avec les adaptateurs en mémoire.
+```
+bin/console messenger:consume async -vv
+```
 
 ## Le temps, découplé
 
@@ -24,12 +21,13 @@ Toute l'application lit l'heure via `Psr\Clock\ClockInterface` (PSR-20) : `Clock
 
 ## Choix à discuter
 
-- **Une commande n'est enregistrée qu'une fois validée.** Le panier est un brouillon, en mémoire, jusqu'à `place()`. La Prise de commande ne connaît une commande qu'à partir du moment où le client s'engage.
-- **L'identité est générée par l'application** (`nextIdentity()`, UUID v7) et non par la base : l'agrégat a son identité dès sa création.
-- Le test fonctionnel de l'étape 0 passe toujours, sans modification : c'est lui qui a rendu ce remaniement sûr.
+- **Événement du domaine ou événement d'intégration ?** `OrderAccepted` est interne et libre d'évoluer ; `OrderAcceptedIntegrationEvent` est un contrat, qui change rarement et prudemment.
+- **Consistance éventuelle** : la course est créée après l'acceptation, pas dans la même opération. Si sa création échoue, la commande reste acceptée ; il faudra rejouer la réaction (le transport async, avec ses tentatives, est fait pour ça).
+- **Le domaine décide, l'infrastructure minute** : la règle des 5 minutes est dans l'agrégat ; le délai d'exécution est un détail technique. `expireIfNotAnswered()` est sans effet si le restaurant a répondu entre-temps.
+- `Run` ne regroupe pas encore deux commandes automatiquement : l'agrégat sait le faire (`addOrder()`), la politique de regroupement reste à écrire.
 
 ## Toujours là
 
-`src/Service/OrderService.php` : l'annulation (R6) et l'expiration (R5) écrivent directement dans la table, en contournant l'agrégat.
+`OrderService::cancelOrder()`, en SQL direct. Conséquence visible : une annulation ne publie aucun événement.
 
-Suite : [TP 9](docs/tp/tp9-evenements.md).
+Suite : [TP 10](docs/tp/tp10-refactoring-final.md).

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ordering\Domain\Model;
 
 use App\Ordering\Domain\Event\OrderAccepted;
+use App\Ordering\Domain\Event\OrderCancelled;
 use App\Ordering\Domain\Event\OrderPlaced;
 use App\Ordering\Domain\Event\OrderRejected;
 use App\Ordering\Domain\Exception\AnswerDeadlineHasPassed;
@@ -144,6 +145,21 @@ final class Order extends AggregateRoot
         $this->status = OrderStatus::Rejected;
 
         $this->recordThat(new OrderRejected($this->id, $now));
+    }
+
+    /**
+     * R5 : sans réponse du restaurant dans les 5 minutes, la commande est annulée et le client remboursé.
+     * Appelée à l'échéance ; sans effet si le restaurant a répondu entre-temps.
+     */
+    public function expireIfNotAnswered(\DateTimeImmutable $now): void
+    {
+        if (OrderStatus::Placed !== $this->status || $now < $this->answerDeadline()) {
+            return;
+        }
+
+        $this->status = OrderStatus::Cancelled;
+
+        $this->recordThat(new OrderCancelled($this->id, CancellationReason::RestaurantDidNotAnswer, $now));
     }
 
     public function id(): OrderId
