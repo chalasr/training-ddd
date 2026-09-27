@@ -6,6 +6,8 @@ use App\Entity\Dish;
 use App\Entity\Order;
 use App\Entity\OrderItem;
 use App\Entity\Restaurant;
+use App\Ordering\Domain\ValueObject\DeliverySlot;
+use App\Ordering\Domain\ValueObject\Money;
 use App\Repository\DishRepository;
 use App\Repository\OrderRepository;
 use App\Repository\RestaurantRepository;
@@ -134,38 +136,27 @@ class OrderService
         \assert($restaurant instanceof Restaurant);
 
         // Montant minimum (hors frais de livraison)
-        if ($order->getSubtotal() < $restaurant->getMinimumOrderAmount()) {
+        if (!Money::ofCents($order->getSubtotal())->isGreaterThanOrEqual(Money::ofCents($restaurant->getMinimumOrderAmount()))) {
             throw new \InvalidArgumentException(sprintf(
                 'Le montant minimum de commande pour ce restaurant est de %s €.',
                 number_format($restaurant->getMinimumOrderAmount() / 100, 2, ',', ' ')
             ));
         }
 
-        // Créneau
-        $start = \DateTime::createFromFormat('Y-m-d H:i', $slot);
+        // Créneau (R3) : désormais porté par le value object DeliverySlot
+        $start = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', $slot);
         if (!$start) {
             throw new \InvalidArgumentException('Créneau invalide, format attendu : AAAA-MM-JJ HH:MM');
         }
-        $start->setTime((int) $start->format('H'), (int) $start->format('i'), 0);
-
-        if ((int) $start->format('i') % 15 != 0) {
-            throw new \InvalidArgumentException('Les créneaux commencent à l\'heure, et quart, et demie ou moins le quart.');
-        }
-
         $now = new \DateTime();
-        $diff = $start->getTimestamp() - $now->getTimestamp();
-        if ($diff < 30 * 60) {
-            throw new \InvalidArgumentException('Le créneau doit commencer au moins 30 minutes après la commande.');
-        }
+        $deliverySlot = DeliverySlot::startingAt($start, \DateTimeImmutable::createFromMutable($now));
 
-        $end = (clone $start)->modify('+15 minutes');
-
-        if ($start->format('H:i') < $restaurant->getOpeningTime() || $end->format('H:i') > $restaurant->getClosingTime()) {
+        if ($deliverySlot->start->format('H:i') < $restaurant->getOpeningTime() || $deliverySlot->end()->format('H:i') > $restaurant->getClosingTime()) {
             throw new \InvalidArgumentException('Le restaurant est fermé sur ce créneau.');
         }
 
-        $order->setDeliverySlotStart($start);
-        $order->setDeliverySlotEnd($end);
+        $order->setDeliverySlotStart(\DateTime::createFromImmutable($deliverySlot->start));
+        $order->setDeliverySlotEnd(\DateTime::createFromImmutable($deliverySlot->end()));
 
         // Frais de livraison
         $order->setDeliveryFee($this->computeDeliveryFee($order));
@@ -177,12 +168,12 @@ class OrderService
 
     public function computeTotals(Order $order): void
     {
-        $subtotal = 0;
+        $subtotal = Money::zero();
         foreach ($order->getItems() as $item) {
-            $subtotal += $item->getUnitPrice() * $item->getQuantity();
+            $subtotal = $subtotal->add(Money::ofCents($item->getUnitPrice())->multiply($item->getQuantity()));
         }
-        $order->setSubtotal($subtotal);
-        $order->setTotal($subtotal + $order->getDeliveryFee());
+        $order->setSubtotal($subtotal->cents);
+        $order->setTotal($subtotal->cents + $order->getDeliveryFee());
     }
 
     private function computeDeliveryFee(Order $order): int
