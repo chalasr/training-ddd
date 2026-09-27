@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Ordering\Domain\ValueObject;
 
+use Doctrine\ORM\Mapping as ORM;
 use Webmozart\Assert\Assert;
 
 /**
  * Un montant en centimes dans une devise. Jamais de float pour de l'argent.
  */
+#[ORM\Embeddable]
 final readonly class Money
 {
     private function __construct(
+        #[ORM\Column]
         public int $cents,
+        #[ORM\Column(length: 3)]
         public string $currency,
     ) {
         Assert::greaterThanEq($cents, 0, 'Un montant ne peut pas être négatif.');

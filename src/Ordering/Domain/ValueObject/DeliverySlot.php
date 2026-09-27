@@ -6,17 +6,22 @@ namespace App\Ordering\Domain\ValueObject;
 
 use App\Ordering\Domain\Exception\DeliverySlotIsTooSoon;
 use App\Ordering\Domain\Exception\DeliverySlotMustStartOnAQuarterHour;
+use Doctrine\ORM\Mapping as ORM;
 
 /**
  * R3 : un créneau de livraison dure 15 minutes et commence au plus tôt 30 minutes après la validation.
  * (Les horaires d'ouverture dépendent du restaurant : ils sont vérifiés au moment de valider la commande.)
  */
+#[ORM\Embeddable]
 final readonly class DeliverySlot
 {
     public const int DURATION_IN_MINUTES = 15;
     public const int MINIMUM_LEAD_TIME_IN_MINUTES = 30;
 
-    private function __construct(public \DateTimeImmutable $start)
+    private function __construct(
+        #[ORM\Column]
+        public \DateTimeImmutable $start,
+    )
     {
     }
 

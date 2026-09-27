@@ -20,14 +20,14 @@ class OrderCancelCommand
         #[Argument('Identifiant de la commande')] string $order,
     ): int {
         try {
-            $order = $this->orderService->cancelOrder((int) $order);
+            $this->orderService->cancelOrder($order);
         } catch (\Exception $e) {
             $io->error($e->getMessage());
 
             return Command::FAILURE;
         }
 
-        $io->success(sprintf('Commande %s annulée.', $order->getId()));
+        $io->success(sprintf('Commande %s annulée.', $order));
 
         return Command::SUCCESS;
     }

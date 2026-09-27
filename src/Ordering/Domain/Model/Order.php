@@ -26,25 +26,40 @@ use App\Ordering\Domain\ValueObject\RestaurantTerms;
 use App\Shared\Domain\AggregateRoot;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
+use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Agrégat Commande : la frontière de cohérence de la Prise de commande.
  * Toute modification passe par ses méthodes métier, qui garantissent R1 à R5.
  */
+#[ORM\Entity]
+#[ORM\Table(name: 'ordering_order')]
 final class Order extends AggregateRoot
 {
     public const int ANSWER_DELAY_IN_MINUTES = 5;
 
     /** @var Collection<int, OrderLine> */
+    #[ORM\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order', cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $lines;
+
+    #[ORM\Column(length: 20, enumType: OrderStatus::class)]
     private OrderStatus $status = OrderStatus::Draft;
+
+    #[ORM\Embedded(columnPrefix: 'delivery_slot_')]
     private ?DeliverySlot $deliverySlot = null;
+
+    #[ORM\Embedded(columnPrefix: 'delivery_fee_')]
     private ?Money $deliveryFee = null;
+
+    #[ORM\Column]
     private ?\DateTimeImmutable $placedAt = null;
 
     private function __construct(
+        #[ORM\Embedded(columnPrefix: false)]
         private readonly OrderId $id,
+        #[ORM\Embedded(columnPrefix: 'customer_')]
         private readonly CustomerId $customerId,
+        #[ORM\Embedded(columnPrefix: 'restaurant_')]
         private readonly RestaurantId $restaurantId,
     ) {
         $this->lines = new ArrayCollection();
@@ -71,7 +86,7 @@ final class Order extends AggregateRoot
             }
         }
 
-        $this->lines->add(new OrderLine($dish, $quantity));
+        $this->lines->add(new OrderLine($this, $dish, $quantity));
     }
 
     public function removeLine(string $dishId): void

@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace App\Ordering\Domain\ValueObject;
 
+use Doctrine\ORM\Mapping as ORM;
 use Webmozart\Assert\Assert;
 
 /**
  * Référence vers un restaurant géré par un autre contexte : un identifiant opaque, rien de plus.
  */
+#[ORM\Embeddable]
 final readonly class RestaurantId implements \Stringable
 {
-    private function __construct(public string $value)
+    private function __construct(
+        #[ORM\Column(name: 'id', length: 100)]
+        public string $value,
+    )
     {
         Assert::stringNotEmpty($value);
     }

@@ -4,35 +4,50 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional;
 
+use App\Tests\Support\DatabaseTestCase;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Tools\SchemaTool;
-use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Psr\Clock\ClockInterface;
+use Symfony\Component\Console\Tester\ExecutionResult;
 
 /**
  * Exerce l'application comme un utilisateur : par ses commandes console
  * (self::runCommand() est fourni par Symfony).
- * Base SQLite de test recréée avant chaque test.
  */
-abstract class ConsoleTestCase extends KernelTestCase
+abstract class ConsoleTestCase extends DatabaseTestCase
 {
-    protected function setUp(): void
+    /**
+     * En vrai, chaque commande console est un processus séparé : on vide l'EntityManager
+     * entre deux commandes pour ne pas relire un objet resté en mémoire.
+     *
+     * @param array<string, mixed>            $input
+     * @param list<string>                    $interactiveInputs
+     * @param array<\Closure(string): string> $normalizers
+     */
+    public static function runCommand(string $name, array $input = [], array $interactiveInputs = [], ?bool $interactive = null, ?bool $decorated = null, ?int $verbosity = null, array $normalizers = []): ExecutionResult
     {
-        self::bootKernel();
+        $result = parent::runCommand($name, $input, $interactiveInputs, $interactive, $decorated, $verbosity, $normalizers);
+        $entityManager = self::getContainer()->get(EntityManagerInterface::class);
+        \assert($entityManager instanceof EntityManagerInterface);
+        $entityManager->clear();
 
-        $em = self::getContainer()->get(EntityManagerInterface::class);
-        \assert($em instanceof EntityManagerInterface);
-        $schemaTool = new SchemaTool($em);
-        $metadata = $em->getMetadataFactory()->getAllMetadata();
-        $schemaTool->dropSchema($metadata);
-        $schemaTool->createSchema($metadata);
+        return $result;
     }
 
     /**
-     * Un créneau toujours valide : demain à 12h30, en plein service.
+     * Un créneau toujours valide : demain, en plein service. « Demain » selon l'horloge de l'application,
+     * figée dans les tests (config/services.yaml) : les tests ne dépendent pas du jour où on les lance.
      */
     protected static function tomorrowAt(string $time): string
     {
-        return (new \DateTimeImmutable('tomorrow'))->format('Y-m-d').' '.$time;
+        return self::clock()->now()->modify('+1 day')->format('Y-m-d').' '.$time;
+    }
+
+    protected static function clock(): ClockInterface
+    {
+        $clock = self::getContainer()->get('clock');
+        \assert($clock instanceof ClockInterface);
+
+        return $clock;
     }
 
     protected static function orderIdIn(string $display): string

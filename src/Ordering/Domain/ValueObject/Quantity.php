@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace App\Ordering\Domain\ValueObject;
 
+use Doctrine\ORM\Mapping as ORM;
 use Webmozart\Assert\Assert;
 
+#[ORM\Embeddable]
 final readonly class Quantity
 {
-    private function __construct(public int $value)
+    private function __construct(
+        #[ORM\Column(name: 'quantity')]
+        public int $value,
+    )
     {
         Assert::greaterThan($value, 0, 'Une quantité est strictement positive.');
     }

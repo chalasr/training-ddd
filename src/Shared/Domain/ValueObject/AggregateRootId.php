@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Shared\Domain\ValueObject;
 
+use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 use Webmozart\Assert\Assert;
 
@@ -13,7 +14,11 @@ use Webmozart\Assert\Assert;
  */
 trait AggregateRootId
 {
-    final private function __construct(public readonly string $value)
+    final private function __construct(
+        #[ORM\Id]
+        #[ORM\Column(name: 'id', type: 'guid')]
+        public readonly string $value,
+    )
     {
         Assert::uuid($value);
     }
