@@ -1,0 +1,12 @@
+parameters:
+    level: 8
+    paths:
+        - src
+        - tests
+    doctrine:
+        # Style maker-bundle : propriétés nullables tant que l'entité n'est pas persistée
+        allowNullablePropertyForRequiredField: true
+    ignoreErrors:
+        # Méthode appelée par MicroKernelTrait, invisible pour l'analyse statique
+        - identifier: method.unused
+          path: src/Kernel.php
